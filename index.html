@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>沉浸式星空紀念卡片</title>
+  <style>
+    :root {
+      --env-width: 320px;
+      --env-height: 220px;
+      --card-width: 280px;
+      --card-height: 380px;
+      --primary-env: #d4a373;
+      --flap-color: #c38e5b;
+      --seal-color: #9e2a2b;
+      --paper-bg: #fefae0;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, #2b2d42 0%, #12131c 100%);
+      font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #fxCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .hint-banner {
+      position: fixed;
+      bottom: 24px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      letter-spacing: 1px;
+      background: rgba(255, 255, 255, 0.14);
+      padding: 10px 20px;
+      border-radius: 99px;
+      backdrop-filter: blur(6px);
+      transition: all 0.4s ease;
+      z-index: 100;
+      pointer-events: none;
+      text-align: center;
+      max-width: 90vw;
+    }
+
+    /* 頂部編輯按鈕（讓送卡片者可以隨時調整內容） */
+    .edit-toggle-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.18);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      z-index: 200;
+      transition: background 0.2s;
+    }
+    .edit-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* 編輯器側邊面板 */
+    .editor-panel {
+      position: fixed;
+      top: 0;
+      right: -340px;
+      width: 320px;
+      height: 100vh;
+      background: #f8f9fa;
+      box-shadow: -5px 0 25px rgba(0,0,0,0.3);
+      z-index: 300;
+      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .editor-panel.is-open {
+      right: 0;
+    }
+    .editor-panel h3 {
+      margin: 0 0 8px 0;
+      color: #3d405b;
+      font-size: 18px;
+    }
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .input-group label {
+      font-size: 12px;
+      font-weight: bold;
+      color: #6c757d;
+    }
+    .input-group textarea, .input-group input {
+      padding: 8px 10px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .input-group textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+    .save-btn {
+      background: #e07a5f;
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .save-btn:hover {
+      background: #cc6548;
+    }
+
+    .stage {
+      position: relative;
+      width: var(--env-width);
+      height: var(--env-height);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      perspective: 1400px;
+      z-index: 10;
+    }
+
+    /* 信封結構 */
+    .envelope {
+      position: absolute;
+      width: var(--env-width);
+      height: var(--env-height);
+      background: #b5835a;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55);
+      transition: transform 0.9s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.8s ease;
+      z-index: 20;
+      perspective: 800px;
+    }
+
+    .envelope-pocket {
+      position: absolute;
+      inset: 0;
+      background: var(--primary-env);
+      clip-path: polygon(0 0, 50% 55%, 100% 0, 100% 100%, 0 100%);
+      border-radius: 0 0 8px 8px;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .envelope-flap {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 130px;
+      background: var(--flap-color);
+      clip-path: polygon(0 0, 100% 0, 50% 100%);
+      transform-origin: top center;
+      transition: transform 0.65s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    .wax-seal {
+      position: absolute;
+      top: 95px;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 58px;
+      height: 58px;
+      background: radial-gradient(circle at 35% 35%, #e63946, var(--seal-color));
+      border-radius: 50%;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5), inset 0 0 8px rgba(255, 200, 150, 0.4);
+      border: 2px dashed rgba(255, 215, 0, 0.45);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #ffd166;
+      font-size: 22px;
+      cursor: pointer;
+      z-index: 99;
+      pointer-events: auto;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .wax-seal:hover {
+      transform: translate(-50%, -50%) scale(1.12);
+    }
+
+    .stage.is-opened .wax-seal {
+      transform: translate(-50%, -50%) scale(1.5);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .stage.is-opened .envelope-flap {
+      transform: rotateX(180deg);
+      z-index: 1;
+    }
+
+    .stage.is-extracted .envelope {
+      transform: translateY(320px) scale(0.85);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* 卡片結構 */
+    .card-book {
+      position: absolute;
+      width: var(--card-width);
+      height: var(--card-height);
+      transform-style: preserve-3d;
+      transform: translateY(20px) scale(0.48);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.5s ease;
+      z-index: 10;
+    }
+
+    .stage.is-opened .card-book {
+      opacity: 1;
+      transform: translateY(-70px) scale(0.58);
+    }
+
+    .stage.is-extracted .card-book {
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+      z-index: 50;
+    }
+
+    .stage.is-extracted.book-open .card-book {
+      transform: translateX(25%) scale(0.95);
+    }
+
+    .page-right {
+      position: absolute;
+      inset: 0;
+      background: var(--paper-bg);
+      border-radius: 4px 12px 12px 4px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45), inset 8px 0 15px rgba(0, 0, 0, 0.06);
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transform: translateZ(0px);
+      cursor: pointer;
+    }
+
+    .page-flipper {
+      position: absolute;
+      inset: 0;
+      transform-origin: left center;
+      transform-style: preserve-3d;
+      transform: translateZ(2px) rotateY(0deg);
+      transition: transform 0.65s cubic-bezier(0.25, 1, 0.5, 1);
+      cursor: grab;
+    }
+
+    .page-flipper.is-dragging {
+      transition: none;
+      cursor: grabbing;
+    }
+
+    .page-face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      border-radius: 4px 12px 12px 4px;
+      padding: 20px;
+    }
+
+    .page-cover {
+      background: linear-gradient(135deg, #3d5a80 0%, #293241 100%);
+      color: #fefae0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      border: 2px solid rgba(255, 215, 0, 0.3);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+      transform: translateZ(1px);
+    }
+
+    .page-cover h1 {
+      font-size: 22px;
+      letter-spacing: 3px;
+      margin: 12px 0 8px;
+      color: #ffd166;
+    }
+
+    .page-cover p {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+
+    .page-inside-left {
+      background: var(--paper-bg);
+      transform: rotateY(180deg) translateZ(1px);
+      border-radius: 12px 4px 4px 12px;
+      box-shadow: -10px 15px 35px rgba(0, 0, 0, 0.35), inset -8px 0 15px rgba(0, 0, 0, 0.06);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      perspective: 900px;
+    }
+
+    .polaroid-scene {
+      position: relative;
+      width: 205px;
+      height: 265px;
+      transform: rotate(-3deg);
+      transition: transform 0.3s ease;
+    }
+
+    .washi-tape {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%) rotate(4deg);
+      width: 85px;
+      height: 24px;
+      background: rgba(224, 122, 95, 0.65);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      z-index: 10;
+      pointer-events: none;
+      border-left: 2px dotted rgba(255,255,255,0.6);
+      border-right: 2px dotted rgba(255,255,255,0.6);
+    }
+
+    .polaroid-card {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+      cursor: pointer;
+    }
+
+    .polaroid-card.is-flipped {
+      transform: rotateY(180deg);
+    }
+
+    .polaroid-face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      background: #ffffff;
+      border-radius: 4px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.16);
+      border: 1px solid #ececec;
+      padding: 12px 12px 14px 12px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .polaroid-front {
+      transform: translateZ(1px);
+      justify-content: space-between;
+    }
+
+    .photo-box {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      background: #f1f3f5;
+      border: 1px dashed #ced4da;
+      border-radius: 2px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #6c757d;
+      cursor: pointer;
+    }
+
+    .photo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    .photo-box.has-image img {
+      display: block;
+    }
+
+    .photo-box.has-image .upload-prompt {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      opacity: 0;
+      transition: opacity 0.25s;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .photo-box.has-image:hover .upload-prompt {
+      opacity: 1;
+    }
+
+    .polaroid-caption {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #495057;
+      text-align: center;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .polaroid-back {
+      transform: rotateY(180deg) translateZ(1px);
+      background: #fffdf9;
+      background-image: radial-gradient(#e9ecef 1px, transparent 1px);
+      background-size: 14px 14px;
+      justify-content: space-between;
+      padding: 16px;
+    }
+
+    .secret-title {
+      font-size: 12px;
+      color: #e07a5f;
+      letter-spacing: 1px;
+      font-weight: bold;
+      border-bottom: 1px solid #f2cc8f;
+      padding-bottom: 6px;
+    }
+
+    .secret-note {
+      flex: 1;
+      margin: 10px 0;
+      font-size: 13px;
+      line-height: 1.65;
+      color: #3d405b;
+      overflow-y: auto;
+    }
+
+    .flip-polaroid-btn {
+      align-self: center;
+      margin-top: 10px;
+      background: #3d405b;
+      color: #fefae0;
+      border: none;
+      padding: 5px 12px;
+      border-radius: 99px;
+      font-size: 11px;
+      cursor: pointer;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .flip-polaroid-btn:hover {
+      background: #e07a5f;
+      transform: scale(1.06);
+    }
+
+    .letter-title {
+      color: #e07a5f;
+      font-size: 16px;
+      font-weight: bold;
+      margin: 0 0 8px 0;
+    }
+
+    .typewriter-text {
+      color: #3d405b;
+      font-size: 13.5px;
+      line-height: 1.7;
+      min-height: 80px;
+      border-bottom: 1px dashed rgba(61, 64, 91, 0.15);
+      padding-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background-color: #e07a5f;
+      margin-left: 2px;
+      animation: blink 0.8s infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .scratch-container {
+      position: relative;
+      width: 100%;
+      height: 65px;
+      background: #fff;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #e2ded4;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .scratch-reward {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 12.5px;
+      font-weight: bold;
+      color: #bc6c25;
+      background: #fdf0d5;
+      letter-spacing: 0.5px;
+      padding: 0 8px;
+      text-align: center;
+    }
+
+    .scratch-canvas {
+      position: absolute;
+      inset: 0;
+      cursor: crosshair;
+      touch-action: none;
+    }
+
+    @media (max-width: 600px) {
+      .stage.is-extracted.book-open .card-book {
+        transform: translateX(22%) scale(0.62);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部編輯控制按鈕 -->
+  <button class="edit-toggle-btn" id="editToggleBtn">⚙️ 編輯卡片內容</button>
+
+  <!-- 買家專用自訂編輯面板 -->
+  <div class="editor-panel" id="editorPanel">
+    <h3>🎨 卡片內容自訂設定</h3>
+    <p style="font-size: 12px; color: #6c757d; margin: 0;">在這裡修改文字與獎品，完成後點擊儲存，即可把檔案傳給對方！</p>
+
+    <div class="input-group">
+      <label>1. 拍立得照片標題/日期</label>
+      <input type="text" id="inputCaption" value="2026.11.10 我們的紀念日 ♥">
+    </div>
+
+    <div class="input-group">
+      <label>2. 拍立得背面悄悄話</label>
+      <textarea id="inputSecret">這天我們一起去了好多地方！點開文字可以直接修改這段專屬回憶喔～✨</textarea>
+    </div>
+
+    <div class="input-group">
+      <label>3. 右側信紙主文</label>
+      <textarea id="inputMessage">謝謝你一直以來的陪伴，每一天因為有你而變得閃閃發光。希望這張卡片能記錄我們無數個美好瞬間，未來也要一起去更多地方！愛你喲 ♥</textarea>
+    </div>
+
+    <div class="input-group">
+      <label>4. 🎁 刮刮樂底下的驚喜獎品</label>
+      <input type="text" id="inputReward" value="🎉 兌換券：週末任選一家想吃的大餐！">
+    </div>
+
+    <button class="save-btn" id="saveConfigBtn">💾 儲存並更新卡片</button>
+  </div>
+
+  <canvas id="fxCanvas"></canvas>
+  <input type="file" id="photoInput" accept="image/*" style="display: none;">
+
+  <div class="stage" id="stage">
+    <div class="card-book" id="cardBook">
+      <div class="page-flipper" id="pageFlipper">
+        <!-- 封面 -->
+        <div class="page-face page-cover">
+          <div style="font-size: 42px;">✨</div>
+          <h1>HAPPY ANNIVERSARY</h1>
+          <p>專屬我們的回憶錄</p>
+          <span style="margin-top: 40px; font-size: 12px; border: 1px solid rgba(255,255,255,0.4); padding: 6px 14px; border-radius: 20px;">
+            👈 點擊或向左拖曳翻開
+          </span>
+        </div>
+
+        <!-- 內頁左側 -->
+        <div class="page-face page-inside-left">
+          <div class="polaroid-scene" id="polaroidScene">
+            <div class="washi-tape"></div>
+            <div class="polaroid-card" id="polaroidCard">
+              <div class="polaroid-face polaroid-front">
+                <div class="photo-box" id="photoBox" title="點擊上傳或更換照片">
+                  <img id="polaroidImg" alt="回憶照片">
+                  <div class="upload-prompt" id="uploadPrompt">
+                    <span>📸 點擊塞入照片<br><small style="font-size:10px; opacity:0.8;">(自動裁切壓縮)</small></span>
+                  </div>
+                </div>
+                <div class="polaroid-caption" id="polaroidCaption">2026.11.10 我們的紀念日 ♥</div>
+              </div>
+              <div class="polaroid-face polaroid-back">
+                <div class="secret-title">🔒 照片背後的悄悄話</div>
+                <div class="secret-note" id="secretNote">這天我們一起去了好多地方！點開文字可以直接修改這段專屬回憶喔～✨</div>
+                <div style="font-size: 10px; color: #adb5bd; text-align: right;">翻回正面 ↩</div>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="flip-polaroid-btn" id="flipPolaroidBtn">🔄 翻到背面看悄悄話</button>
+        </div>
+      </div>
+
+      <!-- 右側內頁 -->
+      <div class="page-right" id="pageRight">
+        <div>
+          <div class="letter-title">Dear 寶貝,</div>
+          <div class="typewriter-text" id="typewriterText">
+            <span id="typewriterContent"></span><span class="cursor" id="cursor"></span>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 11px; color: #bc6c25; margin-bottom: 4px; font-weight: bold;">🎁 下方有一張驚喜刮刮樂，動手刮開它：</div>
+          <div class="scratch-container">
+            <div class="scratch-reward" id="scratchRewardText">🎉 兌換券：週末任選一家想吃的大餐！</div>
+            <canvas class="scratch-canvas" id="scratchCanvas"></canvas>
+          </div>
+        </div>
+
+        <div style="text-align: right; font-size: 12px; color: #8d99ae;">
+          👉 點擊此處或向右滑動闔上
+        </div>
+      </div>
+    </div>
+
+    <div class="envelope" id="envelope">
+      <div class="envelope-flap"></div>
+      <div class="envelope-pocket"></div>
+      <div class="wax-seal" id="waxSeal" title="點擊拆開信封">♥</div>
+    </div>
+  </div>
+
+  <div class="hint-banner" id="hintBanner">👆 點擊右上角「⚙️ 編輯卡片內容」可自訂文字與獎品！</div>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const envelope = document.getElementById('envelope');
+    const pageFlipper = document.getElementById('pageFlipper');
+    const pageRight = document.getElementById('pageRight');
+    const hintBanner = document.getElementById('hintBanner');
+
+    const editToggleBtn = document.getElementById('editToggleBtn');
+    const editorPanel = document.getElementById('editorPanel');
+    const saveConfigBtn = document.getElementById('saveConfigBtn');
+
+    const inputCaption = document.getElementById('inputCaption');
+    const inputSecret = document.getElementById('inputSecret');
+    const inputMessage = document.getElementById('inputMessage');
+    const inputReward = document.getElementById('inputReward');
+
+    const polaroidCaption = document.getElementById('polaroidCaption');
+    const secretNote = document.getElementById('secretNote');
+    const typewriterContent = document.getElementById('typewriterContent');
+    const cursor = document.getElementById('cursor');
+    const scratchRewardText = document.getElementById('scratchRewardText');
+    const scratchCanvas = document.getElementById('scratchCanvas');
+
+    const photoInput = document.getElementById('photoInput');
+    const photoBox = document.getElementById('photoBox');
+    const polaroidImg = document.getElementById('polaroidImg');
+    const uploadPrompt = document.getElementById('uploadPrompt');
+    const polaroidCard = document.getElementById('polaroidCard');
+    const flipPolaroidBtn = document.getElementById('flipPolaroidBtn');
+
+    const STORAGE_KEY = 'immersive_card_custom_config_v2';
+    let isCardExtracted = false;
+    let currentAngle = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startAngle = 0;
+    let hasTypewriterStarted = false;
+
+    let currentMessage = "謝謝你一直以來的陪伴，每一天因為有你而變得閃閃發光。希望這張卡片能記錄我們無數個美好瞬間，未來也要一起去更多地方！愛你喲 ♥";
+
+    // 側邊編輯面板開關
+    editToggleBtn.addEventListener('click', () => {
+      editorPanel.classList.toggle('is-open');
+    });
+
+    // 儲存設定按鈕
+    saveConfigBtn.addEventListener('click', () => {
+      polaroidCaption.textContent = inputCaption.value;
+      secretNote.textContent = inputSecret.value;
+      currentMessage = inputMessage.value;
+      scratchRewardText.textContent = inputReward.value;
+
+      saveCardState();
+      editorPanel.classList.remove('is-open');
+      hintBanner.textContent = '✨ 內容已更新！快拆開信封看看吧！';
+      
+      // 重新初始化刮刮樂確保文字置中
+      initScratchCard();
+    });
+
+    // ====== 背景星光與彩帶特效引擎 ======
+    const fxCanvas = document.getElementById('fxCanvas');
+    const fxCtx = fxCanvas.getContext('2d');
+    let width, height;
+
+    function resizeCanvas() {
+      width = fxCanvas.width = window.innerWidth;
+      height = fxCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const stars = Array.from({ length: 45 }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      size: Math.random() * 2.2 + 0.5,
+      alpha: Math.random(),
+      speed: Math.random() * 0.015 + 0.005
+    }));
+
+    let confettiParticles = [];
+    function triggerConfetti() {
+      const colors = ['#e63946', '#f1faee', '#a8dadc', '#457b9d', '#ffd166', '#ffb703', '#fb8500'];
+      for (let i = 0; i < 70; i++) {
+        confettiParticles.push({
+          x: width / 2,
+          y: height / 2 - 50,
+          vx: (Math.random() - 0.5) * 14,
+          vy: (Math.random() - 0.7) * 12 - 4,
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          rotation: Math.random() * 360,
+          rotSpeed: (Math.random() - 0.5) * 10,
+          opacity: 1
+        });
+      }
+    }
+
+    function renderFX() {
+      fxCtx.clearRect(0, 0, width, height);
+      stars.forEach(s => {
+        s.alpha += s.speed;
+        if (s.alpha > 1 || s.alpha < 0.2) s.speed = -s.speed;
+        fxCtx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+        fxCtx.beginPath();
+        fxCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        fxCtx.fill();
+      });
+
+      confettiParticles.forEach((p, index) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.35;
+        p.vx *= 0.98;
+        p.rotation += p.rotSpeed;
+        p.opacity -= 0.006;
+
+        if (p.opacity <= 0 || p.y > height) {
+          confettiParticles.splice(index, 1);
+          return;
+        }
+
+        fxCtx.save();
+        fxCtx.translate(p.x, p.y);
+        fxCtx.rotate((p.rotation * Math.PI) / 180);
+        fxCtx.globalAlpha = p.opacity;
+        fxCtx.fillStyle = p.color;
+        fxCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+        fxCtx.restore();
+      });
+
+      requestAnimationFrame(renderFX);
+    }
+    requestAnimationFrame(renderFX);
+
+    // ====== 互動控制 ======
+    envelope.addEventListener('click', () => {
+      if (stage.classList.contains('is-opened')) return;
+      stage.classList.add('is-opened');
+      hintBanner.textContent = '✨ 正在取出紀念卡片...';
+
+      setTimeout(() => {
+        stage.classList.add('is-extracted');
+        isCardExtracted = true;
+        hintBanner.textContent = '👈 點擊封面或向左拖曳翻開卡片';
+      }, 850);
+    });
+
+    function updateFlipAngle(angle) {
+      currentAngle = angle;
+      pageFlipper.style.transform = `translateZ(2px) rotateY(${currentAngle}deg)`;
+      const isOpen = currentAngle === -180;
+      stage.classList.toggle('book-open', isOpen);
+
+      if (isOpen) {
+        hintBanner.textContent = '🎉 卡片已翻開！動手刮開右下角的刮刮樂吧！';
+        if (!hasTypewriterStarted) {
+          hasTypewriterStarted = true;
+          startTypewriter();
+          triggerConfetti();
+        }
+      } else {
+        hintBanner.textContent = '👈 點擊封面或向左拖曳翻開卡片';
+      }
+    }
+
+    pageFlipper.addEventListener('pointerdown', (e) => {
+      if (!isCardExtracted) return;
+      if (e.target.closest('#polaroidScene') || e.target.closest('#flipPolaroidBtn')) return;
+      isDragging = true;
+      startX = e.clientX;
+      startAngle = currentAngle;
+      pageFlipper.classList.add('is-dragging');
+      pageFlipper.setPointerCapture(e.pointerId);
+    });
+
+    pageFlipper.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startX;
+      const angleDelta = (deltaX / 220) * 180;
+      const nextAngle = Math.max(-180, Math.min(0, startAngle + angleDelta));
+      pageFlipper.style.transform = `translateZ(2px) rotateY(${nextAngle}deg)`;
+      currentAngle = nextAngle;
+    });
+
+    const finishFlip = (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      pageFlipper.classList.remove('is-dragging');
+
+      const movedDistance = Math.abs(e.clientX - startX);
+      if (movedDistance < 10) {
+        updateFlipAngle(startAngle < -90 ? 0 : -180);
+      } else {
+        updateFlipAngle(currentAngle < -90 ? -180 : 0);
+      }
+    };
+
+    pageFlipper.addEventListener('pointerup', finishFlip);
+    pageFlipper.addEventListener('pointercancel', finishFlip);
+
+    pageRight.addEventListener('click', (e) => {
+      if (e.target.closest('#scratchCanvas')) return;
+      if (currentAngle === -180) {
+        updateFlipAngle(0);
+      }
+    });
+
+    function startTypewriter() {
+      typewriterContent.textContent = '';
+      let charIndex = 0;
+      function type() {
+        if (charIndex < currentMessage.length) {
+          typewriterContent.textContent += currentMessage.charAt(charIndex);
+          charIndex++;
+          setTimeout(type, 45 + Math.random() * 35);
+        } else {
+          cursor.style.display = 'none';
+        }
+      }
+      setTimeout(type, 300);
+    }
+
+    function initScratchCard() {
+      scratchCanvas.width = scratchCanvas.parentElement.clientWidth || 236;
+      scratchCanvas.height = 65;
+      const ctx = scratchCanvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, scratchCanvas.width, scratchCanvas.height);
+      gradient.addColorStop(0, '#c0c0c0');
+      gradient.addColorStop(0.5, '#e8e8e8');
+      gradient.addColorStop(1, '#a8a8a8');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, scratchCanvas.width, scratchCanvas.height);
+
+      ctx.fillStyle = '#666666';
+      ctx.font = 'bold 13px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✨ 請用手指或滑鼠把這裡刮開 ✨', scratchCanvas.width / 2, scratchCanvas.height / 2);
+
+      let isDrawing = false;
+      function scratch(x, y) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(x, y, 16, 0, Math.PI * 2, false);
+        ctx.fill();
+      }
+
+      scratchCanvas.addEventListener('pointerdown', (e) => {
+        isDrawing = true;
+        const r = scratchCanvas.getBoundingClientRect();
+        scratch(e.clientX - r.left, e.clientY - r.top);
+        scratchCanvas.setPointerCapture(e.pointerId);
+      });
+
+      scratchCanvas.addEventListener('pointermove', (e) => {
+        if (!isDrawing) return;
+        const r = scratchCanvas.getBoundingClientRect();
+        scratch(e.clientX - r.left, e.clientY - r.top);
+      });
+
+      const stopScratch = () => { isDrawing = false; };
+      scratchCanvas.addEventListener('pointerup', stopScratch);
+      scratchCanvas.addEventListener('pointercancel', stopScratch);
+    }
+    setTimeout(initScratchCard, 400);
+
+    // 照片上傳
+    photoBox.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (polaroidCard.classList.contains('is-flipped')) return;
+      photoInput.click();
+    });
+
+    photoInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 400;
+          canvas.height = 400;
+          const ctx = canvas.getContext('2d');
+          const minSide = Math.min(img.width, img.height);
+          ctx.drawImage(img, (img.width - minSide)/2, (img.height - minSide)/2, minSide, minSide, 0, 0, 400, 400);
+          applyPhoto(canvas.toDataURL('image/jpeg', 0.82));
+          saveCardState();
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function applyPhoto(base64) {
+      polaroidImg.src = base64;
+      photoBox.classList.add('has-image');
+      uploadPrompt.innerHTML = '<span>🔄 點擊更換照片</span>';
+    }
+
+    flipPolaroidBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isFlipped = polaroidCard.classList.toggle('is-flipped');
+      flipPolaroidBtn.innerHTML = isFlipped ? '🖼️ 翻回正面看照片' : '🔄 翻到背面看悄悄話';
+    });
+
+    // 狀態存取
+    function saveCardState() {
+      try {
+        const data = {
+          image: photoBox.classList.contains('has-image') ? polaroidImg.src : '',
+          caption: inputCaption.value,
+          secret: inputSecret.value,
+          message: inputMessage.value,
+          reward: inputReward.value
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) {}
+    }
+
+    function loadCardState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.image) applyPhoto(data.image);
+        if (data.caption) { inputCaption.value = data.caption; polaroidCaption.textContent = data.caption; }
+        if (data.secret) { inputSecret.value = data.secret; secretNote.textContent = data.secret; }
+        if (data.message) { inputMessage.value = data.message; currentMessage = data.message; }
+        if (data.reward) { inputReward.value = data.reward; scratchRewardText.textContent = data.reward; }
+      } catch (e) {}
+    }
+
+    loadCardState();
+  </script>
+</body>
+</html>
